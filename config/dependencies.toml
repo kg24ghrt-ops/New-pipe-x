@@ -1,0 +1,49 @@
+# ============================================================================
+# newpipex dependency pin file (single source of truth)
+# ============================================================================
+#
+# This file is the authoritative record of *which* release of each extraction
+# backend this project is currently pinned to.  It is maintained by:
+#
+#   tools/check-dependencies.py     -- inspect upstream releases, report drift
+#   tools/update-dependencies.py    -- bump the pins AND every mirrored version
+#                                      declaration in the build files
+#
+# The two backends documented in README.md ("Extraction backends"):
+#
+#   newpipeextractor  lightweight / native Android path
+#                     Maven coordinate: com.github.TeamNewPipe:NewPipeExtractor
+#                     consumed by app/build.gradle.kts
+#   yt-dlp            Python path, executed through Chaquopy
+#                     PyPI requirement: yt-dlp==<version>
+#                     consumed by app/python-requirements.txt
+#
+# `current` is kept in sync automatically by update-dependencies.py; everything
+# else in the file is hand written metadata.
+#
+# Layout: one table per managed dependency.
+
+[newpipeextractor]
+kind = "github-release"
+repository = "TeamNewPipe/NewPipeExtractor"
+coordinate = "com.github.TeamNewPipe:NewPipeExtractor"
+# Upstream tags are prefixed with "v" (v0.26.5); the Gradle property is stored
+# without it so the version can be compared and ordered numerically.
+tag_prefix = "v"
+version_scheme = "semver"
+gradle_property = "newpipeExtractorVersion"
+current = "0.26.5"
+changelog_url = "https://github.com/TeamNewPipe/NewPipeExtractor/releases"
+notes = "Java library published as an aggregated JitPack artifact; needs the jitpack repository."
+
+[yt_dlp]
+kind = "python-package"
+pypi_package = "yt-dlp"
+repository = "yt-dlp/yt-dlp"
+requirement_name = "yt-dlp"
+# PyPI normalises yt-dlp's CalVer tags: GitHub 2026.08.19 -> PyPI 2026.8.19.
+version_scheme = "calver-yy-mm-dd"
+requirements_file = "app/python-requirements.txt"
+current = "2026.8.19"
+changelog_url = "https://github.com/yt-dlp/yt-dlp/releases"
+notes = "Installed into the Chaquopy build environment; new releases usually only fix extractors."
