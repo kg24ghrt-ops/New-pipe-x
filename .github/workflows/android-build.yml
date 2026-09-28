@@ -73,10 +73,10 @@ jobs:
   build:
     name: Assemble APK (${{ matrix.variant }})
     needs: verify-pins
-    if: >
-      ${{ github.event_name != 'workflow_dispatch' ||
-          github.event.inputs.build_type == 'both' ||
-          github.event.inputs.build_type == matrix.variant }}
+    # matrix isn't available when job-level `if` is evaluated; avoid referencing it here.
+    # Allow the job to run for dispatches that ask for both variants, otherwise
+    # the assemble steps already gate by matrix.variant and will skip the non-matching variant.
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'both' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
