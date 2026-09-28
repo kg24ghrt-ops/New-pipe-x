@@ -406,19 +406,17 @@ def update_requirements(dep: Dependency, version: str, result: ApplyResult,
 
 def update_pin_file(dep: Dependency, version: str, result: ApplyResult,
                     path: str = CONFIG_PATH) -> None:
-    """Keep the ``current`` field of the pin file in sync with the build files."""
-    regex = re.compile(r'^(?P<head>\s*current\s*=\s*")(?P<old>[^"]*)(?P<tail>"\s*(?:#.*)?)$')
-    rewrite_at(path, dep.key, regex, r"\g<head>{replacement}\g<tail>", version,
-               f"pin file [{dep.key}] current", result)
+    """Keep the ``current`` field of *this dependency's* section in sync.
 
-
-def rewrite_at(path: str, section: str, regex: "re.Pattern", template: str, replacement: str,
-               reason: str, result: ApplyResult) -> None:
-    """Rewrite the first matching line inside one ``[section]`` of a file."""
+    The pin file holds several ``current = ...`` lines (one per backend), so the
+    generic :func:`rewrite` helper cannot be used here: rewriting must be
+    restricted to the ``[<dep.key>]`` section.
+    """
     if not os.path.exists(path):
-        result.warnings.append(f"{rel(path)} is missing - expected it to declare {reason}")
+        result.warnings.append(f"{rel(path)} is missing - expected it to pin {dep.label()}")
         return
 
+    regex = re.compile(r'^(?P<head>\s*current\s*=\s*")(?P<old>[^"]*)(?P<tail>"\s*(?:#.*)?)$')
     lines = _read_lines(path)
     inside = False
     matched = False
@@ -426,7 +424,7 @@ def rewrite_at(path: str, section: str, regex: "re.Pattern", template: str, repl
     for index, line in enumerate(lines):
         table = _TABLE_RE.match(line)
         if table:
-            inside = table.group(1) == section
+            inside = table.group(1) == dep.key
             continue
         if not inside:
             continue
@@ -435,18 +433,18 @@ def rewrite_at(path: str, section: str, regex: "re.Pattern", template: str, repl
         if not match:
             continue
         matched = True
-        new_line = match.expand(template).replace("{replacement}", replacement)
-        if new_line == stripped:
-            result.record(path, stripped, reason)
-        else:
+        new_line = match.expand(r"\g<head>{replacement}\g<tail>").replace("{replacement}", version)
+        if new_line != stripped:
             newline = "\n" if line.endswith("\n") else ""
-            result.add_edit(path, stripped, new_line, reason)
+            result.add_edit(path, stripped, new_line, f"pin file [{dep.key}] current")
             lines[index] = new_line + newline
             dirty = True
+        else:
+            result.record(path, stripped, f"pin file [{dep.key}] current")
         break
 
     if not matched:
-        result.warnings.append(f"{rel(path)}: no 'current' entry found in section [{section}]")
+        result.warnings.append(f"{rel(path)}: no 'current' entry found in section [{dep.key}]")
         return
     if dirty:
         _write_lines(path, lines)

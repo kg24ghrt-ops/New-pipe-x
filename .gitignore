@@ -1,7 +1,1 @@
-# Compiled files
-__pycache__/
-*.pyc
-
-# Build artifacts and dependencies (Gradle)
-.gradle/
-build/
+(empty)
