@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.opt.newpipex.app-mergeDebugResources-64:/values-ldltr-v21/values-ldltr-v21.xml",
+            "map": [
+                {
+                    "source": "/root/.gradle/caches/8.14.4/transforms/eb6101d34990a9c447ffd309af3f78d9/transformed/appcompat-1.7.0/res/values-ldltr-v21/values-ldltr-v21.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "112",
+                        "endOffsets": "163"
+                    }
+                }
+            ]
+        }
+    ]
+}

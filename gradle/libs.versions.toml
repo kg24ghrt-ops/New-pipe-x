@@ -1,0 +1,74 @@
+# Version catalog for the newpipex build.
+#
+# Upstream dependency versions managed by the "dependency updates" CI workflow
+# (.github/workflows/dependency-updates.yml) live in [versions] below:
+#   - newpipe-extractor : checked against https://github.com/TeamNewPipe/NewPipeExtractor/releases
+#   - yt-dlp            : checked against https://github.com/yt-dlp/yt-dlp/releases
+#
+# NOTE ON NEWPIPEEXTRACTOR:
+#   NewPipeExtractor does NOT guarantee a stable public API across releases.
+#   When it is introduced, it must be consumed only through our own
+#   backend/adapter interface (e.g. an `:extractor-bridge` module), so that an
+#   upstream API change requires touching only that adapter, never app code.
+
+[versions]
+# --- Extraction backends (CI-managed; see .github/scripts/update_versions.py) ---
+newpipe-extractor = "0.24.3"
+yt-dlp = "2025.04.30"
+
+# --- Android / language toolchain ---
+agp = "8.7.3"
+kotlin = "2.0.21"
+
+# --- AndroidX / Compose ---
+core-ktx = "1.13.1"
+appcompat = "1.7.0"
+material = "1.12.0"
+constraintlayout = "2.1.4"
+compose-bom = "2024.09.03"
+activity-compose = "1.9.3"
+lifecycle-runtime-compose = "2.8.7"
+navigation-compose = "2.8.4"
+junit = "4.13.2"
+test-ext-junit = "1.2.1"
+espresso-core = "3.6.1"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle-runtime-compose" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation-compose" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "test-ext-junit" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso-core" }
+
+# Compose uses the BOM, so individual artifacts are version-less here.
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+
+# --- Extraction backends (declared but NOT wired into any module yet) ---
+# The extraction engines are intentionally not implemented at this stage.
+# When the native adapter lands, add to the adapter module:
+#   implementation(libs.newpipe.extractor)
+# and make sure only adapter code imports org.schabi.newpipe.extractor.*.
+newpipe-extractor = { group = "com.github.TeamNewPipe", name = "NewPipeExtractor", version.ref = "newpipe-extractor" }
+# yt-dlp is shipped as a Python package through the Chaquopy backend module.
+# Its version is tracked here and installed with `pip install "yt-dlp==<version>"`.
+# When the Chaquopy module lands, add to its python requirements:
+#   yt-dlp==<libs.versions.yt-dlp>
+yt-dlp = { group = "org.ytdlp", name = "yt-dlp", version.ref = "yt-dlp" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }

@@ -1,0 +1,29 @@
+R_DEF: Internal format may change without notice
+local
+color background
+color error
+color ic_launcher_background
+color on_background
+color on_error
+color on_primary
+color on_secondary
+color on_surface
+color on_tertiary
+color outline
+color primary
+color primary_variant
+color secondary
+color secondary_variant
+color surface
+color tertiary
+drawable ic_add
+drawable ic_launcher_background
+drawable ic_launcher_foreground
+id textView
+layout activity_main
+mipmap ic_launcher
+mipmap ic_launcher_round
+string app_name
+string app_name_short
+string content_description_app_icon
+style Theme.Newpipex

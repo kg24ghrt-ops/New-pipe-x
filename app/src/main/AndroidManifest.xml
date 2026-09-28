@@ -10,7 +10,7 @@
         android:theme="@style/Theme.Newpipex">
 
         <activity
-            android:name="com.opt.new.pipe.x.MainActivity"
+            android:name="com.opt.newpipex.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.Newpipex">
             <intent-filter>

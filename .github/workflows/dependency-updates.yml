@@ -1,0 +1,133 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Weekly check, Monday 03:00 UTC.
+    - cron: '0 3 * * 1'
+  workflow_dispatch: {}
+
+# Least privilege: read the repo, open/update PRs. Never write to main,
+# never auto-merge — updates are only ever proposed as pull requests.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dependency-updates
+  cancel-in-progress: false
+
+jobs:
+  check-and-update:
+    name: Check NewPipeExtractor & yt-dlp updates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      # ---------------------------------------------------------------------
+      # 1) Query upstream release feeds (free, public GitHub APIs only).
+      #    Produces machine-readable outputs for the update + PR steps.
+      # ---------------------------------------------------------------------
+      - name: Check for newer releases
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          latest_release_tag() {
+            # Fetches the newest published release tag of an upstream repo.
+            curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              "https://api.github.com/repos/$1/releases/latest" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])'
+          }
+
+          extractor_latest="$(latest_release_tag TeamNewPipe/NewPipeExtractor)"
+          ytdlp_latest="$(latest_release_tag yt-dlp/yt-dlp)"
+
+          echo "extractor_latest=${extractor_latest}"        >> "$GITHUB_OUTPUT"
+          echo "extractor_latest_clean=${extractor_latest#v}" >> "$GITHUB_OUTPUT"
+          echo "ytdlp_latest=${ytdlp_latest}"                 >> "$GITHUB_OUTPUT"
+
+          echo "Latest NewPipeExtractor release: ${extractor_latest}"
+          echo "Latest yt-dlp release:           ${ytdlp_latest}"
+
+      # ---------------------------------------------------------------------
+      # 2) Update tracked versions in gradle/libs.versions.toml only.
+      #    No application code is touched by this workflow.
+      # ---------------------------------------------------------------------
+      - name: Update dependency versions in version catalog
+        id: update
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update_versions.py \
+            --newpipe-extractor "${{ steps.check.outputs.extractor_latest_clean }}" \
+            --yt-dlp "${{ steps.check.outputs.ytdlp_latest }}"
+
+          if git diff --quiet -- gradle/libs.versions.toml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No version changes needed."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git --no-pager diff -- gradle/libs.versions.toml
+          fi
+
+      # ---------------------------------------------------------------------
+      # 3) Validate the update with the real Android build + tests.
+      #    If compilation or tests fail, this job fails: no PR is created
+      #    and the failure is exposed in the workflow logs / PR checks.
+      # ---------------------------------------------------------------------
+      - name: Set up JDK 17
+        if: steps.update.outputs.changed == 'true'
+        uses: actions/setup-java@v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle (wrapper + cache)
+        if: steps.update.outputs.changed == 'true'
+        uses: gradle/actions/setup-gradle@v4.3.1
+        with:
+          cache-read-only: true
+
+      - name: Build and test with updated dependencies
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug testDebugUnitTest lintDebug
+
+      # ---------------------------------------------------------------------
+      # 4) Propose the change as a PR (never merged automatically).
+      #    peter-evans/create-pull-request dedupes via the fixed branch name,
+      #    so repeated runs update the existing PR instead of opening new ones.
+      #    If the build/test step above fails, this "success"-gated step is
+      #    skipped: the broken update stays unmerged and the failure is
+      #    exposed in the failed workflow run / red PR check.
+      # ---------------------------------------------------------------------
+      - name: Create or update dependency-update pull request
+        if: steps.update.outputs.changed == 'true' && success()
+        uses: peter-evans/create-pull-request@v6.2.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/dependency-updates
+          delete-branch: true
+          title: "chore(deps): update NewPipeExtractor and/or yt-dlp"
+          commit-message: "chore(deps): update extraction backend dependency versions"
+          labels: dependencies
+          body: |
+            Automated dependency update (created by the `Dependency Updates` workflow).
+
+            | Dependency | Updated to |
+            | --- | --- |
+            | NewPipeExtractor | ${{ steps.check.outputs.extractor_latest }} |
+            | yt-dlp | ${{ steps.check.outputs.ytdlp_latest }} |
+
+            - [x] `assembleDebug`, `testDebugUnitTest`, `lintDebug` passed with these versions.
+            - This PR must be reviewed manually. It will **never** be merged automatically.
+            - NewPipeExtractor API note: upstream does not guarantee API stability. Any
+              breakage caused by this bump should be contained in our extractor
+              backend/adapter layer, not in application code.

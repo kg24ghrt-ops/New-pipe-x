@@ -1,0 +1,79 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: this workflow only reads the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Test (debug APK)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      # Fail loudly (and clearly) if the Gradle/Android project skeleton is missing,
+      # instead of letting a later step fail with a confusing error.
+      - name: Verify required project files exist
+        run: |
+          set -e
+          missing=0
+          for f in settings.gradle.kts build.gradle.kts gradlew gradle/wrapper/gradle-wrapper.properties app/build.gradle.kts; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Required project file '$f' is missing. This repository must contain a valid Gradle/Android project structure."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          chmod +x gradlew
+
+      # AGP 8.x requires JDK 17+; Gradle 8.14 also supports newer LTS JDKs,
+      # so bumping to 21/25 here stays compatible with Android 15/16 development.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Gradle caching via the official gradle/actions setup-gradle step.
+      # Uses the repository's own wrapper (gradle/wrapper/gradle-wrapper.properties).
+      - name: Set up Gradle (wrapper + cache)
+        uses: gradle/actions/setup-gradle@v4.3.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # Single invocation: build + validation tasks together.
+      # `assembleDebug` produces the debug APK; `testDebugUnitTest` runs JVM unit
+      # tests; `lintDebug` validates code/resources (including Android 15/16 targets).
+      - name: Build, test & lint (debug)
+        run: ./gradlew --no-daemon assembleDebug testDebugUnitTest lintDebug
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: newpipex-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/**
+          if-no-files-found: ignore
+          retention-days: 7
