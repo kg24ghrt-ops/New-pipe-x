@@ -11,6 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // NewPipeExtractor is published as an aggregated artifact on JitPack.
+        maven("https://jitpack.io")
     }
 }
 

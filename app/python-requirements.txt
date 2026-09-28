@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# Python dependencies installed into the Chaquopy build environment.
+#
+# This file is consumed by the Python/Chaquopy extraction backend, which runs
+# yt-dlp in-process to cover YouTube plus the additional websites and features
+# that the lightweight NewPipeExtractor path does not implement.
+#
+# The version below is pinned by config/dependencies.toml ([yt_dlp] current)
+# and mirrored here by tools/update-dependencies.py (dependency update
+# workflow).  :app:checkDependencies fails the build if the two drift apart.
+#
+# Keep this an exact pin (`==`): a floating yt-dlp makes APK builds
+# non-reproducible and hides extractor regressions.
+# ---------------------------------------------------------------------------
+yt-dlp==2026.8.19
