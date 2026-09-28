@@ -84,6 +84,14 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.4")
 
+    // Networking
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Media3 / ExoPlayer
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-common:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
+
     // Lightweight / native Android extraction path (NewPipeExtractor backend).
     implementation("com.github.TeamNewPipe:NewPipeExtractor:$newpipeExtractorVersion")
 
