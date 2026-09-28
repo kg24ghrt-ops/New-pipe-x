@@ -162,15 +162,25 @@ val checkDependencies by tasks.registering {
         val extractor = configurations.detachedConfiguration(
             dependencies.create("com.github.TeamNewPipe:NewPipeExtractor:$newpipeExtractorVersion")
         ).apply { isTransitive = true }
-        val resolved = try {
-            (extractor as org.gradle.api.artifacts.LenientConfiguration).allModuleDependencies
+        val resolvedDeps = try {
+            extractor.resolvedConfiguration.firstLevelModuleDependencies
         } catch (error: Exception) {
             failures += "NewPipeExtractor:$newpipeExtractorVersion could not be resolved: ${error.message}"
-            emptyList()
+            emptySet<org.gradle.api.artifacts.ResolvedDependency>()
         }
-        val coordinates = resolved.map { "${it.moduleGroup}:${it.moduleName}" }.toSet()
+        // Collect all transitive dependencies recursively
+        val allDeps = mutableSetOf<org.gradle.api.artifacts.ResolvedDependency>()
+        fun collectTransitive(deps: Set<org.gradle.api.artifacts.ResolvedDependency>) {
+            for (dep in deps) {
+                if (allDeps.add(dep)) {
+                    collectTransitive(dep.children)
+                }
+            }
+        }
+        collectTransitive(resolvedDeps)
+        val coordinates = allDeps.map { "${it.moduleGroup}:${it.moduleName}" }.toSet()
         val missing = newpipeExtractorTransitives - coordinates
-        if (resolved.isNotEmpty() && missing.isNotEmpty()) {
+        if (allDeps.isNotEmpty() && missing.isNotEmpty()) {
             failures += "NewPipeExtractor:$newpipeExtractorVersion no longer brings $missing - review the ProGuard rules and the workflow's verification step"
         }
 
@@ -180,7 +190,7 @@ val checkDependencies by tasks.registering {
         }
         logger.lifecycle(
             "Dependency pins OK: NewPipeExtractor $newpipeExtractorVersion, yt-dlp $ytDlpVersion " +
-                "(${resolved.size} extractor transitive coordinates)"
+                "(${allDeps.size} extractor transitive coordinates)"
         )
     }
 }
