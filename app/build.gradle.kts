@@ -163,7 +163,7 @@ val checkDependencies by tasks.registering {
             dependencies.create("com.github.TeamNewPipe:NewPipeExtractor:$newpipeExtractorVersion")
         ).apply { isTransitive = true }
         val resolved = try {
-            extractor.resolvedConfiguration.firstLevelModuleDependencies
+            extractor.resolvedConfiguration.allModuleDependencies
         } catch (error: Exception) {
             failures += "NewPipeExtractor:$newpipeExtractorVersion could not be resolved: ${error.message}"
             emptyList()
