@@ -1,0 +1,158 @@
+# ============================================================================
+# Android build workflow
+# ============================================================================
+#
+# Compiles the app for every push and pull request so that a dependency bump
+# (see dependency-update.yml) can never be merged while it breaks the build.
+#
+# Jobs:
+#   verify-pins  - cheap guard: config/dependencies.toml, gradle.properties and
+#                  app/python-requirements.txt must describe the same releases,
+#                  and the Python scripts that perform the bumps must stay
+#                  importable/syntax-clean.
+#   build        - assembleDebug + assembleRelease with the Gradle wrapper
+#                  (JDK 17 + the Android SDK preinstalled on ubuntu-latest),
+#                  uploading the APKs as build artifacts.
+# ============================================================================
+
+name: Android Build
+
+on:
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Which variant to assemble"
+        required: false
+        type: choice
+        default: both
+        options:
+          - both
+          - debug
+          - release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  verify-pins:
+    name: Verify dependency pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Syntax check the dependency tooling
+        run: python -m py_compile tools/*.py
+
+      - name: Mirrors must agree with the pin file
+        # --no-fetch keeps this job hermetic; upstream drift is checked by the
+        # Dependency Update workflow instead.
+        run: python tools/check-dependencies.py --no-fetch --fail-outdated
+
+  build:
+    name: Assemble APK (${{ matrix.variant }})
+    needs: verify-pins
+    if: >
+      ${{ github.event_name != 'workflow_dispatch' ||
+          github.event.inputs.build_type == 'both' ||
+          github.event.inputs.build_type == matrix.variant }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [debug, release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Restore Gradle caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            !~/.gradle/caches/build-cache-1
+          key: gradle-${{ matrix.variant }}-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ matrix.variant }}-
+            gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Validate the backend pins inside Gradle
+        run: ./gradlew :app:checkDependencies --stacktrace
+
+      # Gradle names the variants assembleDebug / assembleRelease, so capitalise
+      # the matrix value instead of trying to build it with shell substitution.
+      - name: Assemble debug APK
+        if: matrix.variant == 'debug'
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Assemble release APK
+        if: matrix.variant == 'release'
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Locate the APK
+        id: apk
+        run: |
+          set -euo pipefail
+          APK="$(find "app/build/outputs/apk/${{ matrix.variant }}" -name '*.apk' -print -quit || true)"
+          if [ -z "$APK" ]; then
+            echo "::error::no APK produced under app/build/outputs/apk/${{ matrix.variant }}"
+            exit 1
+          fi
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "size=$(du -h "$APK" | cut -f1)" >> "$GITHUB_OUTPUT"
+          ls -l "$APK" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: newpipex-${{ matrix.variant }}-apk
+          path: ${{ steps.apk.outputs.apk }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload lint/build reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports-${{ matrix.variant }}
+          path: |
+            app/build/reports
+            app/build/logs
+          if-no-files-found: ignore
+          retention-days: 7

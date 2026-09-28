@@ -1,0 +1,194 @@
+# ============================================================================
+# Dependency update workflow for the two extraction backends
+# ============================================================================
+#
+#   NewPipeExtractor  lightweight / native Android YouTube path (JitPack Maven)
+#   yt-dlp            Python path executed through Chaquopy (PyPI)
+#
+# On a schedule (and on demand) this job asks upstream for newer releases and,
+# when one exists that can be dropped in without manual API changes, opens a
+# pull request bumping every mirrored declaration:
+#
+#   config/dependencies.toml      [backend] current = "..."   (source of truth)
+#   gradle.properties             newpipeExtractorVersion / ytDlpVersion
+#   app/python-requirements.txt   yt-dlp==...                 (Chaquopy pin)
+#
+# "Without manual API changes" is enforced by tools/update-dependencies.py:
+#   * yt-dlp uses CalVer and only ships extractor fixes -> always auto-bumpable
+#   * NewPipeExtractor stays API-stable inside 0.x.y -> minor bumps are
+#     auto-bumpable; a major bump (0.x -> 1.0, 1.x -> 2.x) is refused unless a
+#     human re-runs the script with --allow-major.
+#
+# The PR body tells reviewers how to force a blocked major update from the
+# command line.  Merging the PR is what actually changes the pins, so nothing
+# lands unreviewed even though the version files are edited automatically.
+#
+# Note on permissions: create-pull-request commits with secrets.GH_PR_TOKEN
+# when that secret is configured (a PAT able to trigger other workflows), and
+# falls back to the built-in GITHUB_TOKEN otherwise.  With the fallback the PR
+# is still opened, but the build check below has to be triggered manually.
+# ============================================================================
+
+name: Dependency Update
+
+on:
+  schedule:
+    # 06:30 UTC daily - both upstreams publish roughly weekly.
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Restrict to one backend (newpipeextractor | yt-dlp); empty = both"
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Only report the plan, do not open a pull request"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependency-update
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
+  BRANCH_PREFIX: chore/dep-update
+
+jobs:
+  check-and-update:
+    name: Check upstream releases & open bump PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+      summary: ${{ steps.plan.outputs.summary }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Report drift against upstream (informational)
+        run: python tools/check-dependencies.py --json | tee check-report.json
+
+      - name: Compute bump plan (dry run)
+        id: plan
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+        run: |
+          ARGS=(--json)
+          if [ -n "${ONLY:-}" ]; then ARGS+=(--only "$ONLY"); fi
+          # Never fail the job because an update is pending; --write below applies it.
+          python tools/update-dependencies.py "${ARGS[@]}" | tee plan.json
+          python - <<'PY' | tee -a "$GITHUB_OUTPUT"
+          import json
+
+          with open("plan.json", encoding="utf-8") as handle:
+              plan = json.load(handle)
+
+          parts = []
+          for row in plan["results"]:
+              if row["error"]:
+                  parts.append(f"{row['name']}: check failed ({row['error']})")
+              elif row["blocked"]:
+                  parts.append(f"{row['name']}: {row['current']} -> {row['latest']} skipped ({row['reason']})")
+              elif row["bump"]:
+                  parts.append(f"{row['name']}: {row['current']} -> {row['target']}")
+              else:
+                  parts.append(f"{row['name']}: {row['current']} up to date")
+
+          changed = any(r["bump"] and r["target"] for r in plan["results"])
+          print(f"changed={'true' if changed else 'false'}")
+          print(f"summary={'; '.join(parts)}")
+          PY
+          echo "Bump plan: ${{ steps.plan.outputs.summary }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply the plan
+        if: steps.plan.outputs.changed == 'true' && github.event.inputs.dry_run != 'true'
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+        run: |
+          ARGS=(--write)
+          if [ -n "${ONLY:-}" ]; then ARGS+=(--only "$ONLY"); fi
+          python tools/update-dependencies.py "${ARGS[@]}"
+
+      - name: Verify the mirrors agree after the bump
+        if: steps.plan.outputs.changed == 'true' && github.event.inputs.dry_run != 'true'
+        run: python tools/check-dependencies.py --no-fetch
+
+      - name: Collect the changed version declarations
+        id: diff
+        if: steps.plan.outputs.changed == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          git diff --stat | tee -a "$GITHUB_STEP_SUMMARY"
+          if git diff --quiet; then
+            echo "No file changes produced; skipping pull request." >> "$GITHUB_STEP_SUMMARY"
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "any=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "files<<EOF"
+            git diff -U0 -- config/dependencies.toml gradle.properties app/python-requirements.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open bump pull request
+        if: steps.diff.outputs.any == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GH_PR_TOKEN || github.token }}
+          add-paths: |
+            config/dependencies.toml
+            gradle.properties
+            app/python-requirements.txt
+          commit-message: |
+            chore(deps): update extraction backend pins
+
+            ${{ steps.plan.outputs.summary }}
+          branch: ${{ env.BRANCH_PREFIX }}
+          delete-branch: true
+          title: "chore(deps): update NewPipeExtractor / yt-dlp pins"
+          labels: dependencies,automated-pr
+          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          body: |
+            ## Extraction backend update
+
+            ${{ steps.plan.outputs.summary }}
+
+            Generated by `.github/workflows/dependency-update.yml` on `${{ github.ref_name }}`.
+
+            ### Files touched
+            `config/dependencies.toml` is the source of truth; the same release is mirrored into every place the build reads it (`gradle.properties`, `app/python-requirements.txt`).
+
+            ```diff
+            ${{ steps.diff.outputs.files }}
+            ```
+
+            ### What was checked
+            * **NewPipeExtractor** (`com.github.TeamNewPipe:NewPipeExtractor`, JitPack) - newest non-draft GitHub release.
+            * **yt-dlp** (PyPI, installed by Chaquopy from `app/python-requirements.txt`) - newest PyPI release.
+            * Releases were accepted only when they drop in **without manual API changes**: yt-dlp ships dated releases that only touch extractors, and NewPipeExtractor stays API-stable within `0.x`.
+
+            ### Reviewer notes
+            * The *Android Build* workflow runs on this PR; merge only when it is green.
+            * A newer release that was **skipped** because it crosses a major boundary (e.g. `0.26.5 -> 1.0.0`) needs a manual API review first. Apply it deliberately with:
+
+              ```bash
+              ./tools/update-dependencies.py --allow-major --write
+              ```
+
+            * Inspect the drift yourself with `./tools/check-dependencies.py`.
+
+      - name: Nothing to do
+        if: steps.plan.outputs.changed != 'true'
+        run: echo "All managed backends are already on the newest drop-in release." >> "$GITHUB_STEP_SUMMARY"
