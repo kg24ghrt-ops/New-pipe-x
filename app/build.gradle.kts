@@ -4,11 +4,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 android {
-    namespace = "com.opt.new.pipe.x"
+    namespace = "com.opt.newpipex"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.opt.new.pipe.x"
+        applicationId = "com.opt.newpipex"
         minSdk = 31
         targetSdk = 36
         versionCode = 1
