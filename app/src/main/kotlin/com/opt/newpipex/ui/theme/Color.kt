@@ -1,4 +1,4 @@
-package com.opt.new.pipe.x.ui.theme
+package com.opt.newpipex.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

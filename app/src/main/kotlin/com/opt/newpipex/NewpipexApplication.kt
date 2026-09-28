@@ -1,4 +1,4 @@
-package com.opt.new.pipe.x
+package com.opt.newpipex
 
 import android.app.Application
 

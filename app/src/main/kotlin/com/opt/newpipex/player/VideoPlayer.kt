@@ -1,4 +1,4 @@
-package com.opt.new.pipe.x.player
+package com.opt.newpipex.player
 
 import android.content.Context
 import android.net.Uri
@@ -15,8 +15,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
-import com.opt.new.pipe.x.data.SharedHttp
-import com.opt.new.pipe.x.data.StreamInfo
+import com.opt.newpipex.data.SharedHttp
+import com.opt.newpipex.data.StreamInfo
 
 /**
  * Thin wrapper around Media3/ExoPlayer that knows how to feed a [StreamInfo]
