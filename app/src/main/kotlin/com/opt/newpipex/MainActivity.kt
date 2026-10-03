@@ -1,4 +1,4 @@
-package com.opt.new.pipe.x
+package com.opt.newpipex
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -27,7 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.opt.new.pipe.x.ui.theme.NewpipexTheme
+import com.opt.newpipex.ui.theme.NewpipexTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
