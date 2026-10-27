@@ -44,6 +44,6 @@ requirement_name = "yt-dlp"
 # PyPI normalises yt-dlp's CalVer tags: GitHub 2026.08.19 -> PyPI 2026.8.19.
 version_scheme = "calver-yy-mm-dd"
 requirements_file = "app/python-requirements.txt"
-current = "2026.8.19"
+current = "2026.10.26"
 changelog_url = "https://github.com/yt-dlp/yt-dlp/releases"
 notes = "Installed into the Chaquopy build environment; new releases usually only fix extractors."
