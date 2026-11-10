@@ -12,4 +12,4 @@
 # Keep this an exact pin (`==`): a floating yt-dlp makes APK builds
 # non-reproducible and hides extractor regressions.
 # ---------------------------------------------------------------------------
-yt-dlp==2026.8.19
+yt-dlp==2026.10.26
